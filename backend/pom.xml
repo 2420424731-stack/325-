@@ -65,6 +65,12 @@
 			<artifactId>mybatis-plus-spring-boot4-starter</artifactId>
 			<version>3.5.17</version>
 		</dependency>
+		<!-- 分页插件等依赖 jsqlparser 的插件自 3.5.9 起拆分至此独立构件 -->
+		<dependency>
+			<groupId>com.baomidou</groupId>
+			<artifactId>mybatis-plus-jsqlparser</artifactId>
+			<version>3.5.17</version>
+		</dependency>
 		<!-- Sa-Token（认证鉴权，Spring Boot 4 适配版） -->
 		<dependency>
 			<groupId>cn.dev33</groupId>
