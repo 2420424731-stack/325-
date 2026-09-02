@@ -77,6 +77,11 @@
 			<artifactId>sa-token-spring-boot4-starter</artifactId>
 			<version>1.46.0</version>
 		</dependency>
+		<!-- BCrypt 密码加密（仅 crypto 构件，不含完整 Spring Security） -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+		</dependency>
 	</dependencies>
 
 	<build>

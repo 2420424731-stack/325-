@@ -1,5 +1,6 @@
 package com.family.finance.common;
 
+import cn.dev33.satoken.exception.NotLoginException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
@@ -28,6 +29,12 @@ public class GlobalExceptionHandler {
                 .map(err -> err.getField() + " " + err.getDefaultMessage())
                 .orElse("参数校验失败");
         return Result.error(400, msg);
+    }
+
+    /** 未登录（Sa-Token 拦截器抛出） */
+    @ExceptionHandler(NotLoginException.class)
+    public Result<Void> handleNotLogin(NotLoginException e) {
+        return Result.error(401, "未登录或登录已过期");
     }
 
     /** 请求体格式错误（如 JSON 无法解析） */

@@ -41,5 +41,5 @@ public class AssetPosition {
 
     /** 估值更新时间 */
     @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updateTime;
+    private LocalDateTime updatedAt;
 }
