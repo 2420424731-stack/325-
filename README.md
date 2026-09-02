@@ -19,7 +19,7 @@
 
 | 端 | 技术 |
 |----|------|
-| 后端 | Java 17 + Spring Boot 3 + MyBatis-Plus + MySQL 8 + Sa-Token |
+| 后端 | Java 17 + Spring Boot 4 + MyBatis-Plus + MySQL 5.7+ + Sa-Token |
 | 前端 | Vue 3 + Vite + Element Plus + ECharts + Pinia + Axios |
 | 工具 | Maven、knife4j（接口文档）、Git |
 
