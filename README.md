@@ -19,19 +19,32 @@
 
 | 端 | 技术 |
 |----|------|
-| 后端 | Java 17 + Spring Boot 4 + MyBatis-Plus + MySQL 5.7+ + Sa-Token |
+| 后端 | Java 17 + Spring Boot 4 + MyBatis-Plus + MySQL 8 + Sa-Token |
 | 前端 | Vue 3 + Vite + Element Plus + ECharts + Pinia + Axios |
 | 工具 | Maven、knife4j（接口文档）、Git |
 
 ## 项目结构
 
 ```
-├── docs/                # 项目文档（设计方案、需求规格、DDL、测试报告等）
+├── 系统设计方案.md       # 系统设计方案（含开源项目调研）
 ├── sql/
 │   └── init.sql         # 数据库建库建表脚本
-├── backend/             # Spring Boot 后端工程（待建）
-├── frontend/            # Vue 3 前端工程（待建）
-└── README.md
+├── backend/             # Spring Boot 后端工程
+└── frontend/            # Vue 3 前端工程
+```
+
+## 本地运行
+
+```bash
+# 1. 初始化数据库（MySQL 8，执行一次即可）
+mysql -u root -p < sql/init.sql
+
+# 2. 配置本地数据库口令（仓库不提交任何口令）
+#    复制 backend/src/main/resources/application-local.properties 参照创建该文件，
+#    填入自己本机的 username/password；也可用环境变量 DB_PASSWORD 注入
+
+# 3. 启动后端（使用工程内 mvnw，无需全局 Maven）
+cd backend && ./mvnw spring-boot:run     # 默认 8080 端口
 ```
 
 ## 文档索引
@@ -46,7 +59,9 @@
 - [x] 设计方案（系统设计方案.md）
 - [x] 数据库设计（sql/init.sql）
 - [ ] 详细设计（接口文档）
-- [ ] 编码实现（backend / frontend）
+- [x] 后端核心编码：认证（注册建家+内置分类）/ 成员与分类管理 / 收支记录 CRUD 与统计
+- [ ] 前端编码（frontend）
+- [ ] 分析接口与预算/资产管理（拓展）
 - [ ] 集成测试
 - [ ] 演示与答辩
 
