@@ -76,14 +76,17 @@ async function loadAll() {
   loading.value = true
   try {
     const ym = month.value
+    // 统计接口用 year+month(数字)；分析接口用 month=yyyy-MM
+    const [y, m] = ym.split('-').map(Number)
+    const statParams = { year: y, month: m }
     const [c, an, rp, tr, cat, merch, region] = await Promise.all([
       compare(ym),
       anomalies(ym),
       report(ym),
       statsTrend(12),
-      statsCategory({ month: ym, type: 2 }),
-      statsMerchant({ month: ym, type: 2, topN: 10 }),
-      statsRegion({ month: ym, type: 2 }),
+      statsCategory({ ...statParams, type: 2 }),
+      statsMerchant({ ...statParams, type: 2, topN: 10 }),
+      statsRegion({ ...statParams, type: 2 }),
     ])
     cmp.value = c
     anomalyList.value = an || []
