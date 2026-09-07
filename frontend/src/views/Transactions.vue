@@ -3,7 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { ArrowDown, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import {
   createTransaction,
   deleteTransaction,
@@ -48,9 +48,10 @@ const formRef = ref(null)
 const form = reactive({
   type: 2,
   categoryId: null,
+  categoryName: '', // 分类显示（含父路径），提交时不携带
   amount: null,
   bizDate: dayjs().format('YYYY-MM-DD'),
-  memberId: null,
+  memberId: '',
   merchant: '',
   region: '',
   tags: [],
@@ -95,6 +96,39 @@ function toTreeProps(nodes) {
   }))
 }
 
+// ---------- 记账表单分类选择（弹层树：点击父分类=展开，点击叶子=选中） ----------
+
+const catPopVisible = ref(false)
+
+/** 从树中查分类 id 的显示路径，如 ["餐饮支出", "外卖"] */
+function findPath(nodes, id, trail = []) {
+  for (const n of nodes || []) {
+    const cur = [...trail, n.label]
+    if (n.value === id) return cur
+    const hit = findPath(n.children, id, cur)
+    if (hit) return hit
+  }
+  return null
+}
+
+/** 树节点点击：父分类展开/收起不选中；叶子分类选中并关闭弹层 */
+function onCategoryClick(data, node) {
+  if (data.disabled) return // 停用分类不可选
+  if (!node.isLeaf) {
+    node.expanded = !node.expanded
+    return
+  }
+  form.categoryId = data.value
+  form.categoryName = findPath(treeByType[form.type], data.value)?.join(' / ') || data.label
+  catPopVisible.value = false
+}
+
+/** 收入/支出切换：分类树不同，清空已选分类 */
+function onTypeChange() {
+  form.categoryId = null
+  form.categoryName = ''
+}
+
 async function load() {
   loading.value = true
   try {
@@ -133,9 +167,10 @@ function openCreate() {
   Object.assign(form, {
     type: 2,
     categoryId: null,
+    categoryName: '',
     amount: null,
     bizDate: dayjs().format('YYYY-MM-DD'),
-    memberId: null,
+    memberId: '',
     merchant: '',
     region: '',
     tags: [],
@@ -150,9 +185,10 @@ function openEdit(row) {
   Object.assign(form, {
     type: row.type,
     categoryId: row.categoryId,
+    categoryName: findPath(treeByType[row.type], row.categoryId)?.join(' / ') || '',
     amount: row.amount,
     bizDate: row.bizDate,
-    memberId: row.memberId || null,
+    memberId: row.memberId || '',
     merchant: row.merchant || '',
     region: row.region || '',
     tags: row.tags ? row.tags.split(/[,，]/).filter(Boolean) : [],
@@ -313,7 +349,7 @@ function typeTag(row) {
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
         <el-form-item label="类型" prop="type">
-          <el-radio-group v-model="form.type">
+          <el-radio-group v-model="form.type" @change="onTypeChange">
             <el-radio-button :value="1">收入</el-radio-button>
             <el-radio-button :value="2">支出</el-radio-button>
           </el-radio-group>
@@ -329,21 +365,36 @@ function typeTag(row) {
           />
         </el-form-item>
         <el-form-item label="分类" prop="categoryId">
-          <el-tree-select
-            v-model="form.categoryId"
-            :data="treeByType[form.type]"
-            :key="form.type"
-            placeholder="选择分类（叶子分类）"
-            check-strictly
-            :render-after-expand="false"
-            style="width: 280px"
-          />
+          <el-popover v-model:visible="catPopVisible" placement="bottom-start" :width="300" trigger="click">
+            <div style="max-height: 320px; overflow: auto">
+              <el-tree
+                :data="treeByType[form.type]"
+                node-key="value"
+                :props="{ label: 'label', children: 'children', disabled: 'disabled' }"
+                :expand-on-click-node="false"
+                highlight-current
+                empty-text="该类型暂无分类"
+                @node-click="onCategoryClick"
+              />
+            </div>
+            <template #reference>
+              <el-input
+                readonly
+                :model-value="form.categoryName"
+                :placeholder="treeByType[form.type].length ? '点击父分类展开，选最末级分类' : '该类型暂无分类'"
+                style="width: 280px; cursor: pointer"
+              >
+                <template #suffix><el-icon style="color: var(--el-text-color-placeholder)"><ArrowDown /></el-icon></template>
+              </el-input>
+            </template>
+          </el-popover>
         </el-form-item>
         <el-form-item label="日期" prop="bizDate">
           <el-date-picker v-model="form.bizDate" type="date" value-format="YYYY-MM-DD" style="width: 200px" />
         </el-form-item>
         <el-form-item label="成员">
-          <el-select v-model="form.memberId" placeholder="家庭整体" clearable style="width: 200px">
+          <el-select v-model="form.memberId" placeholder="不选=家庭整体" style="width: 200px">
+            <el-option :value="''" label="👪 家庭整体" />
             <el-option v-for="m in store.memberOptions" :key="m.value" :label="m.label" :value="m.value" />
           </el-select>
         </el-form-item>
