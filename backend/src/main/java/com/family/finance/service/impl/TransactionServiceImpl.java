@@ -1,6 +1,7 @@
 package com.family.finance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.family.finance.common.BizException;
 import com.family.finance.common.PageResult;
@@ -16,6 +17,7 @@ import com.family.finance.mapper.TransactionMapper;
 import com.family.finance.mapper.UserMapper;
 import com.family.finance.service.FamilyScopeService;
 import com.family.finance.service.TransactionService;
+import com.family.finance.vo.TransactionExportVO;
 import com.family.finance.vo.TransactionVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -43,12 +45,59 @@ public class TransactionServiceImpl implements TransactionService {
     private final UserMapper userMapper;
     private final FamilyScopeService scope;
 
+    /** 导出上限：家庭记账个人量级远达不到，防止异常全量导出拖垮服务 */
+    private static final int EXPORT_LIMIT = 50_000;
+
     @Override
     public PageResult<TransactionVO> page(TransactionQuery q) {
         Long familyId = scope.familyId();
         Long pageNo = q.getPage() == null || q.getPage() < 1 ? 1L : q.getPage();
         Long size = q.getSize() == null || q.getSize() < 1 ? 10L : Math.min(q.getSize(), 100L);
 
+        LambdaQueryWrapper<Transaction> wrapper = buildFilter(q, familyId);
+        wrapper.orderByDesc(Transaction::getBizDate).orderByDesc(Transaction::getId);
+
+        Page<Transaction> p = transactionMapper.selectPage(new Page<>(pageNo, size), wrapper);
+        return PageResult.of(buildVOList(p.getRecords()), p.getTotal(), p.getCurrent(), p.getSize());
+    }
+
+    @Override
+    public TransactionExportVO export(TransactionQuery q) {
+        Long familyId = scope.familyId();
+        LambdaQueryWrapper<Transaction> wrapper = buildFilter(q, familyId);
+        // 银行流水习惯：日期升序；LIMIT 常量无注入风险，仅做超限兜底
+        wrapper.orderByAsc(Transaction::getBizDate).orderByAsc(Transaction::getId)
+                .last("LIMIT " + (EXPORT_LIMIT + 1));
+        List<Transaction> records = transactionMapper.selectList(wrapper);
+        if (records.size() > EXPORT_LIMIT) {
+            throw new BizException(400, "查询结果超过 " + EXPORT_LIMIT + " 条，请缩小时间范围后再导出");
+        }
+
+        StringBuilder sb = new StringBuilder();
+        // UTF-8 BOM：Excel 直接打开识别为 UTF-8，中文不乱码
+        sb.append('﻿');
+        sb.append("日期,类型,分类,金额(元),经手人,商家,片区,支付方式,标签,备注\r\n");
+        for (TransactionVO vo : buildVOList(records)) {
+            sb.append(vo.getBizDate()).append(',');
+            sb.append(vo.getType() == 1 ? "收入" : "支出").append(',');
+            sb.append(csvCell(vo.getCategoryName())).append(',');
+            sb.append(vo.getAmount() == null ? "" : vo.getAmount().toPlainString()).append(',');
+            sb.append(csvCell(vo.getMemberName() == null ? "家庭" : vo.getMemberName())).append(',');
+            sb.append(csvCell(vo.getMerchant())).append(',');
+            sb.append(csvCell(vo.getRegion())).append(',');
+            sb.append(csvCell(vo.getPaymentMethod())).append(',');
+            sb.append(csvCell(vo.getTags())).append(',');
+            sb.append(csvCell(vo.getNote())).append('\r').append('\n');
+        }
+
+        TransactionExportVO vo = new TransactionExportVO();
+        vo.setCount((long) records.size());
+        vo.setCsv(sb.toString());
+        return vo;
+    }
+
+    /** 筛选条件抽取（分页 / 导出共用，保证口径一致） */
+    private LambdaQueryWrapper<Transaction> buildFilter(TransactionQuery q, Long familyId) {
         LambdaQueryWrapper<Transaction> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Transaction::getFamilyId, familyId);
         if (q.getType() != null) {
@@ -81,10 +130,22 @@ public class TransactionServiceImpl implements TransactionService {
         if (q.getEndDate() != null) {
             wrapper.le(Transaction::getBizDate, q.getEndDate());
         }
-        wrapper.orderByDesc(Transaction::getBizDate).orderByDesc(Transaction::getId);
+        return wrapper;
+    }
 
-        Page<Transaction> p = transactionMapper.selectPage(new Page<>(pageNo, size), wrapper);
-        return PageResult.of(buildVOList(p.getRecords()), p.getTotal(), p.getCurrent(), p.getSize());
+    /** CSV 单元格转义 + Excel 公式注入防护（= + - @ 开头时前置 '，使其按纯文本展示） */
+    private String csvCell(String s) {
+        if (s == null) {
+            return "";
+        }
+        String v = s.trim();
+        if (!v.isEmpty() && "+-@=".indexOf(v.charAt(0)) >= 0) {
+            v = "'" + v;
+        }
+        if (v.contains(",") || v.contains("\"") || v.contains("\r") || v.contains("\n")) {
+            return "\"" + v.replace("\"", "\"\"") + "\"";
+        }
+        return v;
     }
 
     @Override
@@ -112,16 +173,39 @@ public class TransactionServiceImpl implements TransactionService {
     public void update(Long id, TransactionDTO dto) {
         Transaction t = requireTransaction(id);
         checkOperable(t);
+        Long familyId = scope.familyId();
 
-        // 局部更新：DTO 中为 null 的字段保留原值；分类/成员若有变更需重新校验
-        if (dto.getCategoryId() != null && !Objects.equals(t.getCategoryId(), dto.getCategoryId())) {
-            validateCategory(scope.familyId(), dto.getCategoryId(), dto.getType());
+        // 对「最终生效」的 (type, categoryId) 组合做一致性校验：
+        // 只要任一字段有变更就重验（防止把收入记录改成支出、或挂到类型错配的分类下）
+        Integer finalType = dto.getType() != null ? dto.getType() : t.getType();
+        Long finalCategoryId = dto.getCategoryId() != null ? dto.getCategoryId() : t.getCategoryId();
+        if (!Objects.equals(finalType, t.getType()) || !Objects.equals(finalCategoryId, t.getCategoryId())) {
+            validateCategory(familyId, finalCategoryId, finalType);
         }
-        if (dto.getMemberId() != null && !Objects.equals(t.getMemberId(), dto.getMemberId())) {
-            validateMember(scope.familyId(), dto.getMemberId());
+        // 成员有变更（含显式置空 = 改回「家庭整体」）时校验归属
+        if (!Objects.equals(t.getMemberId(), dto.getMemberId())) {
+            validateMember(familyId, dto.getMemberId());
         }
-        applyDto(t, dto);
-        transactionMapper.updateById(t);
+        // 显式 set（允许 null）：可清空商家/备注/标签等可空字段，
+        // 修复 MyBatis-Plus updateById 默认跳过 null 字段导致「清空不生效」的问题
+        LambdaUpdateWrapper<Transaction> uw = new LambdaUpdateWrapper<>();
+        uw.eq(Transaction::getId, id).eq(Transaction::getFamilyId, familyId);
+        uw.set(Transaction::getType, finalType);
+        uw.set(Transaction::getCategoryId, finalCategoryId);
+        if (dto.getAmount() != null) {
+            uw.set(Transaction::getAmount, dto.getAmount());
+        }
+        if (dto.getBizDate() != null) {
+            uw.set(Transaction::getBizDate, dto.getBizDate());
+        }
+        uw.set(Transaction::getMemberId, dto.getMemberId());
+        uw.set(Transaction::getMerchant, trimToNull(dto.getMerchant()));
+        uw.set(Transaction::getRegion, trimToNull(dto.getRegion()));
+        uw.set(Transaction::getTags, trimToNull(dto.getTags()));
+        uw.set(Transaction::getPaymentMethod, trimToNull(dto.getPaymentMethod()));
+        uw.set(Transaction::getImage, trimToNull(dto.getImage()));
+        uw.set(Transaction::getNote, trimToNull(dto.getNote()));
+        transactionMapper.update(null, uw);
     }
 
     @Override
@@ -195,7 +279,7 @@ public class TransactionServiceImpl implements TransactionService {
         }
     }
 
-    /** DTO → 实体（null 不覆盖，空串归一为 null 便于前端回显） */
+    /** DTO → 实体（仅用于 create：空串归一为 null 便于前端回显；update 用显式 set 支持清空） */
     private void applyDto(Transaction t, TransactionDTO dto) {
         if (dto.getType() != null) {
             t.setType(dto.getType());
@@ -220,22 +304,22 @@ public class TransactionServiceImpl implements TransactionService {
         t.setNote(trimToNull(dto.getNote()));
     }
 
-    /** 收集分类 id 及其全部子孙 id（历史流水可能挂在停用子分类上，故含全部状态） */
-    private void collectChildIds(Long familyId, Long parentId, List<Long> out) {
+    /** 收集分类 id 及其全部子孙 id：父分类筛选必含父自身，
+     *  与统计钻取/预算执行的「自身+全子孙」口径一致（防止父类下历史流水被静默漏掉）；
+     *  历史流水可能挂在停用子分类上，故含全部状态 */
+    private void collectChildIds(Long familyId, Long categoryId, List<Long> out) {
+        out.add(categoryId);
         List<Category> all = categoryMapper.selectList(
                 new LambdaQueryWrapper<Category>().eq(Category::getFamilyId, familyId));
-        collectChildIds(parentId, all, out);
+        collectDescendants(categoryId, all, out);
     }
 
-    private void collectChildIds(Long parentId, List<Category> all, List<Long> out) {
+    private void collectDescendants(Long parentId, List<Category> all, List<Long> out) {
         for (Category c : all) {
             if (Objects.equals(c.getParentId(), parentId)) {
                 out.add(c.getId());
-                collectChildIds(c.getId(), all, out);
+                collectDescendants(c.getId(), all, out);
             }
-        }
-        if (out.isEmpty()) {
-            out.add(parentId); // 叶子分类，仅自身
         }
     }
 

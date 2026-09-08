@@ -14,7 +14,7 @@ import {
 import { createLoan, deleteLoan, listLoans, loanPlan, updateLoan } from '../api/loan'
 import { useUserStore } from '../stores/user'
 import { money, date } from '../utils/format'
-import { INK, SERIES_COLORS, baseAxis, itemTooltip, moneyAxisLabel } from '../utils/charts'
+import { INK, SERIES_COLORS, baseAxis, itemTooltip, moneyAxisLabel, escHtml } from '../utils/charts'
 
 /**
  * 资产管理（设计文档 7.3 / 9.1）：
@@ -61,7 +61,7 @@ function buildByType(byType) {
   byTypeOption.value = {
     tooltip: {
       ...itemTooltip(),
-      formatter: (p) => `${p.marker}${p.name}：¥${money(p.value)}（${p.data.count} 笔，占 ${p.percent}%）`,
+      formatter: (p) => `${p.marker}${escHtml(p.name)}：¥${money(p.value)}（${p.data.count} 笔，占 ${p.percent}%）`,
     },
     legend: { top: 0, right: 4, itemWidth: 14, itemHeight: 8, textStyle: { color: INK.secondary, fontSize: 12 } },
     series: [

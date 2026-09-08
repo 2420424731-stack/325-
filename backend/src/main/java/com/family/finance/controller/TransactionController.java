@@ -5,6 +5,7 @@ import com.family.finance.common.Result;
 import com.family.finance.dto.TransactionDTO;
 import com.family.finance.dto.TransactionQuery;
 import com.family.finance.service.TransactionService;
+import com.family.finance.vo.TransactionExportVO;
 import com.family.finance.vo.TransactionVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,12 @@ public class TransactionController {
     @GetMapping
     public Result<PageResult<TransactionVO>> page(TransactionQuery query) {
         return Result.ok(transactionService.page(query));
+    }
+
+    /** 按筛选条件导出 CSV（Excel 可直接打开） */
+    @GetMapping("/export")
+    public Result<TransactionExportVO> export(TransactionQuery query) {
+        return Result.ok(transactionService.export(query));
     }
 
     /** 详情 */

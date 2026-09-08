@@ -65,8 +65,16 @@ public class LoanServiceImpl implements LoanService {
         Loan l = requireLoan(id);
         fill(dto, l);
         l.setMonthlyPayment(monthlyPayment(l));
-        l.setRemainingPrincipal(dto.getRemainingPrincipal() != null
-                ? dto.getRemainingPrincipal() : l.getPrincipal());
+        // 剩余本金：未传时保留原值（曾误重置回全额导致净资产虚增）；传了则校验 0 ≤ 剩余 ≤ 本金
+        if (dto.getRemainingPrincipal() != null) {
+            if (dto.getRemainingPrincipal().signum() < 0
+                    || dto.getRemainingPrincipal().compareTo(l.getPrincipal()) > 0) {
+                throw new BizException(400, "剩余本金须介于 0 与贷款本金之间");
+            }
+            l.setRemainingPrincipal(dto.getRemainingPrincipal());
+        } else if (l.getRemainingPrincipal() == null) {
+            l.setRemainingPrincipal(l.getPrincipal());
+        }
         loanMapper.updateById(l);
         return l;
     }

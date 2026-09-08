@@ -6,6 +6,9 @@ export const pageTransactions = (params) => request.get('/transactions', { param
 /** 详情 */
 export const getTransaction = (id) => request.get(`/transactions/${id}`)
 
+/** 按筛选条件导出 CSV */
+export const exportTransactions = (params) => request.get('/transactions/export', { params })
+
 export const createTransaction = (data) => request.post('/transactions', data)
 export const updateTransaction = (id, data) => request.put(`/transactions/${id}`, data)
 export const deleteTransaction = (id) => request.delete(`/transactions/${id}`)

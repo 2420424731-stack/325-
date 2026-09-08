@@ -116,3 +116,16 @@ export function moneyAxisLabel() {
     formatter: (v) => (Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(1)}万` : v),
   }
 }
+
+/**
+ * HTML 转义：tooltip 默认 renderMode='html'，formatter 拼接的
+ * 分类/商家/片区/资产名等用户可控文本若不转义会构成存储型 XSS（悬停即执行）。
+ * 只对用户文本调用，勿包裹 p.marker（其本身就是 HTML 色块）。
+ */
+export function escHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}

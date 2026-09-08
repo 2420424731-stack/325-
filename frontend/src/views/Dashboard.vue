@@ -18,6 +18,7 @@ import {
   itemTooltip,
   lineSeries,
   moneyAxisLabel,
+  escHtml,
 } from '../utils/charts'
 
 /**
@@ -102,7 +103,7 @@ function buildPie(cats) {
     tooltip: {
       ...itemTooltip(),
       formatter: (p) =>
-        `${p.marker}${p.name}：¥${money(p.value)}（${p.percent}%）`,
+        `${p.marker}${escHtml(p.name)}：¥${money(p.value)}（${p.percent}%）`,
     },
     legend: {
       type: 'scroll',
@@ -137,20 +138,45 @@ function buildPie(cats) {
 function goTransactions() {
   router.push('/transactions')
 }
+
+/** 问候语（按时间段切换） */
+const hour = new Date().getHours()
+const greeting =
+  (hour < 6 ? '夜深了' : hour < 12 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好') +
+  `，${store.user?.nickname || store.user?.username || '朋友'}`
+
+const monthChip = dayjs().format('YYYY年M月')
 </script>
 
 <template>
   <div v-loading="loading">
+    <!-- 问候欢迎条 -->
+    <div class="hello-bar">
+      <div class="hello-left">
+        <span class="hello-wave">👋</span>
+        <div>
+          <div class="hello-title">{{ greeting }}</div>
+          <div class="hello-sub" v-if="store.family">
+            {{ store.family.name }} · 本月收支与家庭财务概览
+          </div>
+        </div>
+      </div>
+      <div class="hello-right">
+        <span class="month-chip">📅 {{ monthChip }}</span>
+        <router-link to="/transactions" class="hello-btn">记一笔 →</router-link>
+      </div>
+    </div>
+
     <!-- 本月收支结余卡片 -->
     <el-row :gutter="12">
       <el-col :span="8">
-        <StatCard title="本月收入" :value="overview.income || 0" />
+        <StatCard title="本月收入" accent="income" :value="overview.income || 0" />
       </el-col>
       <el-col :span="8">
-        <StatCard title="本月支出" :value="overview.expense || 0" />
+        <StatCard title="本月支出" accent="expense" :value="overview.expense || 0" />
       </el-col>
       <el-col :span="8">
-        <StatCard title="本月结余" :value="overview.balance || 0" />
+        <StatCard title="本月结余" accent="balance" :value="overview.balance || 0" />
       </el-col>
     </el-row>
 
@@ -239,11 +265,106 @@ function goTransactions() {
   margin-top: 12px;
 }
 
+/* 问候欢迎条 */
+.hello-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 20px 24px;
+  border-radius: 16px;
+  background:
+    radial-gradient(420px 130px at 90% -40%, rgba(246, 196, 83, 0.16), transparent 70%),
+    linear-gradient(105deg, #ffffff 30%, #e8f4ec 100%);
+  border: 1px solid #ddebe1;
+  box-shadow: 0 10px 26px -16px rgba(23, 74, 46, 0.2);
+}
+
+.hello-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hello-wave {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.hello-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #143d26;
+  letter-spacing: 1px;
+}
+
+.hello-sub {
+  font-size: 12.5px;
+  color: #6b8f78;
+  margin-top: 4px;
+}
+
+.hello-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.month-chip {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1b623c;
+  background: #ffffff;
+  border: 1px solid #cfe2d4;
+  padding: 6px 14px;
+  border-radius: 14px;
+}
+
+.hello-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(180deg, #1b623c, #123f28);
+  padding: 7px 18px;
+  border-radius: 14px;
+  text-decoration: none;
+  box-shadow: 0 6px 14px -6px rgba(18, 70, 43, 0.5);
+  transition: transform 0.15s, filter 0.15s;
+}
+
+.hello-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+/* 卡片头部：标题前绿色竖标 */
 .card-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-weight: 600;
+  font-weight: 700;
+  color: #1c3a29;
+}
+
+.card-head > span:first-child {
+  display: inline-flex;
+  align-items: center;
+}
+
+.card-head > span:first-child::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 14px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #57a276, #1b623c);
+  margin-right: 8px;
+}
+
+.card-head :deep(.el-link) {
+  font-size: 12.5px;
 }
 
 .warn-item {

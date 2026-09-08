@@ -3,8 +3,10 @@ package com.family.finance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.family.finance.common.BizException;
 import com.family.finance.dto.CategoryDTO;
+import com.family.finance.entity.Budget;
 import com.family.finance.entity.Category;
 import com.family.finance.entity.Transaction;
+import com.family.finance.mapper.BudgetMapper;
 import com.family.finance.mapper.CategoryMapper;
 import com.family.finance.mapper.TransactionMapper;
 import com.family.finance.service.CategoryService;
@@ -32,6 +34,7 @@ public class CategoryServiceImpl implements CategoryService {
 
     private final CategoryMapper categoryMapper;
     private final TransactionMapper transactionMapper;
+    private final BudgetMapper budgetMapper;
     private final FamilyScopeService scope;
 
     @Override
@@ -165,6 +168,10 @@ public class CategoryServiceImpl implements CategoryService {
         if (used > 0) {
             throw new BizException(400, "该分类下已有收支记录，不能删除，可停用");
         }
+        // 级联删除该分类名下全部月份的预算，避免悬空引用导致预算页与分析 R3 出现「未知分类」
+        budgetMapper.delete(new LambdaQueryWrapper<Budget>()
+                .eq(Budget::getFamilyId, scope.familyId())
+                .eq(Budget::getCategoryId, id));
         categoryMapper.deleteById(id);
     }
 

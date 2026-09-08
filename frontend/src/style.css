@@ -45,8 +45,21 @@ body {
     'Microsoft YaHei', sans-serif;
   font-size: 14px;
   color: var(--ink-primary);
-  background: #f5f6f8;
+  background: #eef4ef;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ============ Element Plus 绿色主题换肤（登录/注册页同体系，style.css 后于 element css 加载故可覆盖） ============ */
+:root {
+  --el-color-primary: #1b623c;
+  --el-color-primary-rgb: 27, 98, 60;
+  --el-color-primary-light-3: #5b9c76;
+  --el-color-primary-light-5: #8fb9a0;
+  --el-color-primary-light-7: #c3d8c9;
+  --el-color-primary-light-8: #d9e8dd;
+  --el-color-primary-light-9: #edf5ef;
+  --el-color-primary-dark-2: #154e30;
+  --el-border-radius-base: 8px;
 }
 
 /* 金额列对齐 */
@@ -88,4 +101,16 @@ body {
 /* 卡片间距 */
 .el-card + .el-card {
   margin-top: 12px;
+}
+
+/* ============ 卡片润色（全站统一：圆角 + 细绿边 + 柔和投影） ============ */
+.el-card {
+  border-color: #e2ece4;
+  border-radius: 14px;
+  box-shadow: 0 6px 20px -10px rgba(23, 74, 46, 0.12);
+}
+
+/* 页面通用主区域背景 */
+.layout-main {
+  background: transparent;
 }

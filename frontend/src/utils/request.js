@@ -29,6 +29,11 @@ request.interceptors.response.use(
     if (body && body.code === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
+      // 同步清空 Pinia 内存态（懒 import 避免 request → stores/user → api → request 循环依赖；
+      // 已在 /login 页时不发生整页跳转，旧身份残留会一直保留到下次登录）
+      import('../stores/user')
+        .then(({ useUserStore }) => useUserStore().$reset())
+        .catch(() => {})
       if (!location.pathname.startsWith('/login')) {
         location.href = '/login'
       }

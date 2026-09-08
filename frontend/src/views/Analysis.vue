@@ -15,6 +15,7 @@ import {
   itemTooltip,
   lineSeries,
   moneyAxisLabel,
+  escHtml,
 } from '../utils/charts'
 
 /**
@@ -123,7 +124,7 @@ function buildCategoryBar(cats) {
   barOption.value = {
     tooltip: {
       ...itemTooltip(),
-      formatter: (p) => `${p.marker}${p.name}：¥${money(p.value)}（${p.data.count} 笔）`,
+      formatter: (p) => `${p.marker}${escHtml(p.name)}：¥${money(p.value)}（${p.data.count} 笔）`,
     },
     ...baseAxis(),
     xAxis: {
@@ -158,7 +159,7 @@ function buildMerchant(items) {
   merchantOption.value = {
     tooltip: {
       ...itemTooltip(),
-      formatter: (p) => `${p.marker}${p.name}：¥${money(p.value)}（${p.data.count} 笔）`,
+      formatter: (p) => `${p.marker}${escHtml(p.name)}：¥${money(p.value)}（${p.data.count} 笔）`,
     },
     grid: { left: 8, right: 40, top: 8, bottom: 4, containLabel: true },
     xAxis: { type: 'value', splitLine: { lineStyle: { color: INK.grid } }, axisLabel: { color: INK.muted } },
@@ -198,7 +199,7 @@ function buildRegion(items) {
   regionOption.value = {
     tooltip: {
       ...itemTooltip(),
-      formatter: (p) => `${p.marker}${p.name}：¥${money(p.value)}（${p.data.count} 笔）`,
+      formatter: (p) => `${p.marker}${escHtml(p.name)}：¥${money(p.value)}（${p.data.count} 笔）`,
     },
     grid: { left: 8, right: 40, top: 8, bottom: 4, containLabel: true },
     xAxis: { type: 'value', splitLine: { lineStyle: { color: INK.grid } }, axisLabel: { color: INK.muted } },

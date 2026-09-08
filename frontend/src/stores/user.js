@@ -48,9 +48,11 @@ export const useUserStore = defineStore('user', {
       } catch {
         /* 忽略退出接口失败（如 token 已失效） */
       }
-      this.$reset()
+      // 必须先清 localStorage 再 $reset：$reset 会重新执行 state()（内部读取 localStorage），
+      // 顺序颠倒会让内存态回填刚删过的旧身份，造成「退出后 store 仍残留登录态」
       localStorage.removeItem('token')
       localStorage.removeItem('user')
+      this.$reset()
     },
   },
 })

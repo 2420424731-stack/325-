@@ -3,10 +3,11 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { ArrowDown, Download, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import {
   createTransaction,
   deleteTransaction,
+  exportTransactions,
   pageTransactions,
   updateTransaction,
 } from '../api/transaction'
@@ -242,6 +243,31 @@ async function onDelete(row) {
 function typeTag(row) {
   return row.type === 1 ? 'success' : 'danger'
 }
+
+/** 导出当前筛选条件下的全部流水为 CSV（含 BOM，Excel 直接打开不乱码） */
+async function onExport() {
+  const params = {
+    type: filters.type || undefined,
+    categoryId: filters.categoryId || undefined,
+    memberId: filters.memberId || undefined,
+    keyword: filters.keyword || undefined,
+    startDate: filters.dateRange?.[0],
+    endDate: filters.dateRange?.[1],
+  }
+  const data = await exportTransactions(params)
+  if (!data.count) {
+    ElMessage.warning('当前筛选条件下没有可导出的记录')
+    return
+  }
+  const blob = new Blob([data.csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `管家婆收支明细_${dayjs().format('YYYYMMDD-HHmmss')}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+  ElMessage.success(`已导出 ${data.count} 条记录`)
+}
 </script>
 
 <template>
@@ -284,6 +310,7 @@ function typeTag(row) {
       <el-button type="primary" :icon="Search" @click="search">查询</el-button>
       <el-button :icon="Refresh" @click="reset">重置</el-button>
       <div class="spacer"></div>
+      <el-button :icon="Download" @click="onExport">导出 CSV</el-button>
       <el-button type="primary" :icon="Plus" @click="openCreate">记一笔</el-button>
     </div>
 

@@ -64,6 +64,11 @@ public class BudgetServiceImpl implements BudgetService {
         scope.requireAdmin();
         YearMonth ym = resolveMonth(dto.getBudgetMonth());
         validateCategory(dto.getCategoryId());
+        // 家庭总预算（categoryId=null）不受唯一键约束（MySQL 唯一索引忽略 NULL），
+        // 显式预查防同月重复创建；分类预算靠唯一键 + 下方 DuplicateKey 兜底
+        if (dto.getCategoryId() == null && existsFamilyBudget(ym.toString(), null)) {
+            throw new BizException(400, "该月家庭总预算已存在，请直接修改");
+        }
         Budget b = new Budget();
         b.setFamilyId(scope.familyId());
         b.setCategoryId(dto.getCategoryId());
@@ -86,6 +91,9 @@ public class BudgetServiceImpl implements BudgetService {
         Budget b = requireBudget(id);
         YearMonth ym = resolveMonth(dto.getBudgetMonth());
         validateCategory(dto.getCategoryId());
+        if (dto.getCategoryId() == null && existsFamilyBudget(ym.toString(), b.getId())) {
+            throw new BizException(400, "该月家庭总预算已存在");
+        }
         b.setCategoryId(dto.getCategoryId());
         b.setBudgetMonth(ym.toString());
         b.setAmount(dto.getAmount());
@@ -184,6 +192,18 @@ public class BudgetServiceImpl implements BudgetService {
         if (c.getStatus() != 1) {
             throw new BizException(400, "分类已停用，不能设置预算");
         }
+    }
+
+    /** 当月是否存在「家庭总预算」（categoryId 为 NULL，唯一键不约束 NULL，需显式检查）；excludeId 供更新时排除自身 */
+    private boolean existsFamilyBudget(String month, Long excludeId) {
+        LambdaQueryWrapper<Budget> w = new LambdaQueryWrapper<Budget>()
+                .eq(Budget::getFamilyId, scope.familyId())
+                .eq(Budget::getBudgetMonth, month)
+                .isNull(Budget::getCategoryId);
+        if (excludeId != null) {
+            w.ne(Budget::getId, excludeId);
+        }
+        return budgetMapper.selectCount(w) > 0;
     }
 
     private Budget requireBudget(Long id) {
