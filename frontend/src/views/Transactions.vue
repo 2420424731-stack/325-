@@ -22,9 +22,11 @@ import { money, date } from '../utils/format'
 const store = useUserStore()
 const route = useRoute()
 
+// 下拉选项常量：支付方式枚举；标签候选词（标签还支持自由输入自建，这里只做快捷选项）
 const PAY_METHODS = ['支付宝', '微信', '银行卡', '现金', '其他']
 const TAG_SUGGESTS = ['礼尚往来', '生日', '春节', '中秋', '医疗', '教育']
 
+// ===== 列表数据与筛选条件状态（分页查询共用同一份状态） =====
 const loading = ref(false)
 const rows = ref([])
 const total = ref(0)
@@ -34,8 +36,8 @@ const filters = reactive({
   type: null,
   categoryId: null,
   memberId: null,
-  keyword: '',
-  dateRange: null,
+  keyword: '', // 关键词：匹配商家/备注/标签
+  dateRange: null, // 形如 [起, 止]，提交接口时拆成 startDate/endDate
 })
 
 // 分类树（表单与筛选共用，按当前类型加载）
@@ -60,6 +62,8 @@ const form = reactive({
   note: '',
 })
 
+// ===== 弹窗表单校验规则 =====
+// 金额正则 ^\d+(\.\d{1,2})?$：只接受“非负整数或最多两位小数”（元/角/分），负数/0 由输入框 min 0.01 兜底
 const rules = {
   type: [{ required: true, message: '请选择收支类型', trigger: 'change' }],
   categoryId: [{ required: true, message: '请选择分类', trigger: 'change' }],
@@ -70,7 +74,9 @@ const rules = {
   bizDate: [{ required: true, message: '请选择日期', trigger: 'change' }],
 }
 
+// ===== 页面初始化 =====
 onMounted(async () => {
+  // 并发预载 收入/支出 两棵分类树，供筛选下拉与记账弹窗共用
   await Promise.all([loadTree(1), loadTree(2)])
   // 钻取参数：分析页跳转携带的分类/关键词
   if (route.query.categoryId) {
@@ -130,6 +136,7 @@ function onTypeChange() {
   form.categoryName = ''
 }
 
+// ===== 拉取分页列表：把当前筛选状态组装为接口参数 =====
 async function load() {
   loading.value = true
   try {
@@ -140,6 +147,7 @@ async function load() {
       categoryId: filters.categoryId || undefined,
       memberId: filters.memberId || undefined,
       keyword: filters.keyword || undefined,
+      // 日期范围数组拆成起止两个参数；空值传 undefined 表示后端不过滤该条件
       startDate: filters.dateRange?.[0],
       endDate: filters.dateRange?.[1],
     }
@@ -151,11 +159,13 @@ async function load() {
   }
 }
 
+// 查询：回到第 1 页再加载（防止停留在超出范围的分页）
 function search() {
   filters.page = 1
   load()
 }
 
+// 重置：一键清空所有筛选条件后重新加载
 function reset() {
   Object.assign(filters, { page: 1, type: null, categoryId: null, memberId: null, keyword: '', dateRange: null })
   load()
@@ -163,6 +173,7 @@ function reset() {
 
 /* ---------- 新增 / 编辑 ---------- */
 
+// 记一笔：把表单重置为默认值（类型=支出、日期=今天）后打开弹窗
 function openCreate() {
   editingId.value = null
   Object.assign(form, {
@@ -181,6 +192,7 @@ function openCreate() {
   dialogVisible.value = true
 }
 
+// 编辑：整行数据回填到表单；categoryName 重新由分类树拼出含父级的路径
 function openEdit(row) {
   editingId.value = row.id
   Object.assign(form, {
@@ -192,6 +204,7 @@ function openEdit(row) {
     memberId: row.memberId || '',
     merchant: row.merchant || '',
     region: row.region || '',
+    // 库内标签以英文逗号拼接存储，拆分时兼容中/英文逗号并丢弃空串
     tags: row.tags ? row.tags.split(/[,，]/).filter(Boolean) : [],
     paymentMethod: row.paymentMethod || '',
     note: row.note || '',
@@ -199,10 +212,13 @@ function openEdit(row) {
   dialogVisible.value = true
 }
 
+// ===== 保存流水（新增/编辑共用，按 editingId 区分） =====
 async function save() {
+  // 先做整体表单校验，不通过会抛异常并中止保存
   await formRef.value.validate()
   saving.value = true
   try {
+    // 组装提交参数：空串/空标签统一转 null（不覆盖原值）；tags 数组按英文逗号拼接成字符串
     const payload = {
       type: form.type,
       categoryId: form.categoryId,
@@ -229,6 +245,7 @@ async function save() {
   }
 }
 
+// 逻辑删除：先弹二次确认，提示语中说明“删除后可在数据库恢复”
 async function onDelete(row) {
   await ElMessageBox.confirm(
     `确定删除 ${date(row.bizDate)} 「${row.categoryName}」${money(row.amount)} 元的记录吗？删除后可在数据库中恢复（逻辑删除）。`,
@@ -259,6 +276,7 @@ async function onExport() {
     ElMessage.warning('当前筛选条件下没有可导出的记录')
     return
   }
+  // 下载实现：Blob → 临时 URL → 模拟点击 <a> 触发下载，最后释放临时 URL 防止内存泄漏
   const blob = new Blob([data.csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -309,6 +327,7 @@ async function onExport() {
       />
       <el-button type="primary" :icon="Search" @click="search">查询</el-button>
       <el-button :icon="Refresh" @click="reset">重置</el-button>
+      <!-- 工具条右侧：导出 CSV（忽略分页，按当前筛选导出全部） 与 记一笔 -->
       <div class="spacer"></div>
       <el-button :icon="Download" @click="onExport">导出 CSV</el-button>
       <el-button type="primary" :icon="Plus" @click="openCreate">记一笔</el-button>
@@ -354,6 +373,7 @@ async function onExport() {
       </el-table-column>
     </el-table>
 
+    <!-- 分页器：改页码直接 load；改每页条数回到第 1 页（search） -->
     <div class="pager">
       <el-pagination
         v-model:current-page="filters.page"
@@ -391,6 +411,7 @@ async function onExport() {
             style="width: 200px"
           />
         </el-form-item>
+        <!-- 分类：弹层树选择，父分类点击展开、叶子点击选中；展示框显示含父级的完整路径 -->
         <el-form-item label="分类" prop="categoryId">
           <el-popover v-model:visible="catPopVisible" placement="bottom-start" :width="300" trigger="click">
             <div style="max-height: 320px; overflow: auto">
@@ -431,6 +452,7 @@ async function onExport() {
         <el-form-item label="片区">
           <el-input v-model="form.region" placeholder="如：朝阳区望京" maxlength="50" />
         </el-form-item>
+        <!-- 标签：可多选；filterable + allow-create 支持搜索已有标签、回车自建新标签 -->
         <el-form-item label="标签">
           <el-select
             v-model="form.tags"

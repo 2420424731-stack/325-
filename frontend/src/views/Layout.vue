@@ -1,4 +1,8 @@
 <script setup>
+/**
+ * 主布局骨架：左侧墨绿导航侧栏 + 右侧顶栏（标题/提醒铃铛/用户菜单）+ 中央内容区。
+ * 除登录/注册外，各业务页面都作为子路由在此处的 <router-view /> 内切换渲染
+ */
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
@@ -9,35 +13,41 @@ import { anomalies } from '../api/analysis'
 import { listLoans } from '../api/loan'
 import { currentMonth, date, money } from '../utils/format'
 
+// 全局状态与路由引用：store 保存登录用户/当前家庭；route 提供当前路径；router 用于跳转
 const store = useUserStore()
 const route = useRoute()
 const router = useRouter()
 
 onMounted(() => {
-  // 每次刷新后补齐家庭/成员上下文
+  // 每次刷新后补齐家庭/成员上下文（直接刷新页面时 store 尚未加载，须重新拉取）
   if (!store.family) {
+    // 拉取失败静默忽略：本框架页不依赖这些数据，缺上下文由子页面各自兜底
     store.fetchContext().catch(() => {})
   }
-  loadNotify()
+  loadNotify() // 初始化先拉一次铃铛，让角标数字在未打开弹层前就显示出来
 })
 
+// ===== 退出登录 =====
 async function onLogout() {
+  // 弹确认框：用户点"确定"才继续，点"取消"时 confirm 抛错、函数在此中止
   await ElMessageBox.confirm('确定退出登录吗？', '提示', { type: 'warning' })
-  await store.logout()
-  router.push('/login')
+  await store.logout() // 清理本地登录态
+  router.push('/login') // 最后跳回登录页，完成登出闭环
 }
 
 /* ---------- 顶栏提醒铃铛：本月预警（含预算超支）+ 贷款还款日 ---------- */
-
+// notify：拼装后的提醒条目；notifyLoading：加载中标记（同时充当防重入开关）
 const notify = ref([])
 const notifyLoading = ref(false)
 
 /** 贷款下次还款日：每月与起贷日同号，遇短月取当月最后一天 */
 function nextPayday(loan) {
-  const payDay = dayjs(loan.startDate).date()
+  const payDay = dayjs(loan.startDate).date() // 起贷日是几号，还款日就定为每月几号
   const now = dayjs()
+  // Math.min(payDay, daysInMonth())：当月没有此日期（如 31 日遇短月）时顺延为当月最后一天
   let due = now.date(Math.min(payDay, now.daysInMonth()))
   if (due.isBefore(now, 'day')) {
+    // 本月应还日已过去 → 下月同号才是下一次还款日，再次做短月保护
     const next = now.add(1, 'month')
     due = next.date(Math.min(payDay, next.daysInMonth()))
   }
@@ -45,14 +55,14 @@ function nextPayday(loan) {
 }
 
 async function loadNotify() {
-  if (notifyLoading.value) return
+  if (notifyLoading.value) return // 已在请求中则忽略，防弹层反复打开造成重复请求
   notifyLoading.value = true
   try {
-    const items = []
+    const items = [] // 先在局部收集，全部处理完再一次赋值，避免列表逐条刷屏
     // 1) 本月预警（R1~R7 中 danger/warning，含 R3 预算超支）→ 跳统计分析页
     const an = (await anomalies(currentMonth())) || []
     for (const a of an) {
-      if (a.level === 'info') continue
+      if (a.level === 'info') continue // info 级属"温馨提示"，不占用铃铛提醒
       items.push({
         key: `anomaly-${a.ruleCode}-${a.dimension}`,
         kind: 'anomaly',
@@ -81,10 +91,12 @@ async function loadNotify() {
     }
     notify.value = items
   } finally {
-    notifyLoading.value = false
+    notifyLoading.value = false // 无论成败都复位，防止异常后铃铛一直处于加载态
   }
 }
 
+// ===== 点击提醒条目 =====
+// 贷款类提醒去资产管理页(/assets)；规则预警类去统计分析页(/analysis) 查看详情
 function onNotifyClick(item) {
   router.push(item.kind === 'loan' ? '/assets' : '/analysis')
 }
@@ -94,6 +106,7 @@ function onNotifyClick(item) {
   <el-container class="layout">
     <!-- ===== 墨绿侧栏 ===== -->
     <el-aside width="220px" class="layout-aside">
+      <!-- 侧栏顶部品牌区：金币图标 + 产品名 -->
       <div class="brand">
         <div class="brand-coin">
           <span class="brand-coin-rim">¥</span>
@@ -104,6 +117,8 @@ function onNotifyClick(item) {
         </div>
       </div>
 
+      <!-- 主导航菜单：router 模式下点击菜单项即按 index 路由跳转；
+           :default-active="route.path" 让当前路由对应的菜单自动高亮 -->
       <el-menu router :default-active="route.path" class="layout-menu">
         <el-menu-item index="/dashboard">
           <el-icon><Odometer /></el-icon><span>首页仪表盘</span>
@@ -144,10 +159,16 @@ function onNotifyClick(item) {
     <el-container>
       <!-- ===== 顶栏 ===== -->
       <el-header class="layout-header">
+        <!-- 左：当前页面标题（取自各路由配置的 meta.title，缺省显示空） -->
         <div class="header-title">{{ route.meta.title || '' }}</div>
+        <!-- 右：提醒铃铛 + 当前家庭名 + 用户头像下拉 -->
         <div class="header-right">
+          <!-- 提醒铃铛：数据在弹层每次打开(@show)时拉取，而非页面加载时拉——
+               这样打开弹层时提醒内容一定是最新的 -->
           <el-popover trigger="click" :width="340" popper-class="notify-pop" @show="loadNotify">
             <template #reference>
+              <!-- 铃铛按钮本体：el-badge 显示红点角标，数字为提醒条数；
+                   无提醒时 :hidden 隐藏角标，条数超过 99 显示 99+ -->
               <el-badge :value="notify.length" :hidden="notify.length === 0" :max="99" class="notify-badge">
                 <button class="notify-btn" title="提醒">
                   <el-icon :size="16"><Bell /></el-icon>
@@ -158,6 +179,7 @@ function onNotifyClick(item) {
               <span class="notify-title">🔔 待办提醒</span>
               <span class="notify-count">{{ notify.length ? `共 ${notify.length} 条` : '' }}</span>
             </div>
+            <!-- 弹层内容：无提醒时展示空态安抚文案；加载期间列表区域由 v-loading 遮罩 -->
             <el-empty
               v-if="!notifyLoading && !notify.length"
               description="暂无待办提醒，一切正常 🎉"
@@ -179,7 +201,9 @@ function onNotifyClick(item) {
               </div>
             </div>
           </el-popover>
+          <!-- 当前家庭名徽章：仅当拉取到家庭上下文(v-if)时才显示 -->
           <span class="family-name" v-if="store.family">{{ store.family.name }}</span>
+          <!-- 用户下拉：左侧头像取昵称首字，选中菜单项后经 command 命令回调 onLogout -->
           <el-dropdown @command="onLogout">
             <span class="user-chip">
               <el-avatar :size="28" class="user-avatar">{{ (store.user?.nickname || '?')[0] }}</el-avatar>
@@ -195,6 +219,7 @@ function onNotifyClick(item) {
         </div>
       </el-header>
 
+      <!-- 中央内容区：按当前路由渲染对应子页面，与侧栏菜单的高亮联动 -->
       <el-main class="layout-main">
         <router-view />
       </el-main>
@@ -203,6 +228,8 @@ function onNotifyClick(item) {
 </template>
 
 <style scoped>
+/* ===== 整体骨架 ===== */
+/* 布局根占满整个视口高度，配合 el-header/el-aside/el-main 的纵向 flex 布局 */
 .layout {
   height: 100%;
 }
@@ -278,6 +305,7 @@ function onNotifyClick(item) {
   --el-menu-item-height: 44px;
 }
 
+/* 菜单项修饰：圆角悬浮块；选中项加半透明白底与金色指示条（见 .is-active 规则） */
 .layout-menu :deep(.el-menu-item) {
   position: relative;
   margin-bottom: 5px;
@@ -363,6 +391,7 @@ function onNotifyClick(item) {
   letter-spacing: 0.5px;
 }
 
+/* 标题左侧的绿色竖条装饰 */
 .header-title::before {
   content: '';
   display: inline-block;
@@ -413,6 +442,7 @@ function onNotifyClick(item) {
   transform: translateY(-1px);
 }
 
+/* 顶栏用户区：头像 + 昵称组成整体，点击展开下拉（el-dropdown 的触发元素） */
 .user-chip {
   display: flex;
   align-items: center;
@@ -442,6 +472,7 @@ function onNotifyClick(item) {
   color: var(--ink-muted);
 }
 
+/* 内容区：统一留出页面内边距，子页面内容超高时在此区域内滚动 */
 .layout-main {
   padding: 18px 20px;
   overflow-y: auto;
@@ -450,7 +481,9 @@ function onNotifyClick(item) {
 </style>
 
 <style>
-/* 铃铛弹层内容被 teleport 到 body，需用非 scoped 样式（popper-class="notify-pop"） */
+/* ===== 铃铛弹层全局样式 =====
+   弹层内容会被 el-popover 传送到 <body> 下渲染，scoped 的属性选择器命中不到它，
+   因此单独用非 scoped 样式，并借助 popper-class="notify-pop" 限定作用范围 */
 .notify-pop {
   padding: 10px !important;
   border-radius: 12px;
@@ -512,6 +545,7 @@ function onNotifyClick(item) {
   color: #14341f;
 }
 
+/* 提醒描述文字最多两行，超出自动以省略号截断 */
 .notify-item-desc {
   font-size: 12px;
   color: #6b8f78;

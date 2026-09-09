@@ -26,44 +26,51 @@ import {
  * 本月收支结余卡片 × 3、近 6 月趋势折线、支出分类环形图、最近 10 笔流水、本月预警摘要
  */
 const store = useUserStore()
-const router = useRouter()
+const router = useRouter() // 供卡片头部"查看明细 / 全部流水"等跳转使用
 
-const month = currentMonth()
-const loading = ref(true)
-const overview = ref({})
-const recent = ref([])
-const warnings = ref([])
+// ===== 页面数据状态 =====
+const month = currentMonth() // 本月 "YYYY-MM" 字符串，作为预警查询参数
+const loading = ref(true) // 首屏并发请求期间显示整页 loading
+const overview = ref({}) // 本月收支汇总：income / expense / balance
+const recent = ref([]) // 最近 10 笔流水（下方表格的数据源）
+const warnings = ref([]) // 本月预警：过滤掉 info 级后最多取前 3 条
 
+// 图表配置对象：由接口数据构建后交给 ChartBox 渲染；
+// trendEmpty / pieEmpty 为 true 时 ChartBox 显示"暂无数据"空态
 const trendOption = ref({})
 const pieOption = ref({})
 const trendEmpty = ref(false)
 const pieEmpty = ref(false)
 
+// ===== 首屏数据加载 =====
+// 5 个接口互不依赖，用 Promise.all 并发请求一次到位，减少串行等待的白屏时间
 onMounted(async () => {
   try {
-    await store.fetchContext()
+    await store.fetchContext() // 先补齐家庭/用户上下文（问候语与各接口的鉴权都依赖登录态）
     const [ov, tr, cat, tx, an] = await Promise.all([
-      statsOverview({ year: dayjs().year(), month: dayjs().month() + 1 }),
-      statsTrend(6),
-      statsCategory({ year: dayjs().year(), month: dayjs().month() + 1, type: 2 }),
-      pageTransactions({ page: 1, size: 10 }),
-      anomalies(month),
+      statsOverview({ year: dayjs().year(), month: dayjs().month() + 1 }), // 本月收入/支出/结余 → 顶部三张卡
+      statsTrend(6), // 近 6 个月收支序列 → 折线图
+      statsCategory({ year: dayjs().year(), month: dayjs().month() + 1, type: 2 }), // 本月支出(type=2)分类统计 → 环形图
+      pageTransactions({ page: 1, size: 10 }), // 最近 10 笔流水（分页接口第一页） → 表格
+      anomalies(month), // 本月预警规则命中结果 → 右侧预警摘要
     ])
     overview.value = ov
-    recent.value = tx.records || []
-    warnings.value = (an || []).filter((a) => a.level !== 'info').slice(0, 3)
-    buildTrend(tr)
+    recent.value = tx.records || [] // 分页接口返回的列表在 records 字段里
+    warnings.value = (an || []).filter((a) => a.level !== 'info').slice(0, 3) // 只留 danger/warning，最多 3 条
+    buildTrend(tr) // 把接口数据组装成 ECharts 的 option
     buildPie(cat)
   } finally {
-    loading.value = false
+    loading.value = false // 加载结束（成功或失败）都解除整页 loading
   }
 })
 
 /** 近 6 月收支趋势折线：收入蓝 slot1 / 支出橙 slot2（颜色跟随实体，不随筛选变化） */
 function buildTrend(points) {
+  // 后端返回 "2026-04" 这类月份，截掉年份段并加"月"作为 X 轴刻度
   const months = points.map((p) => p.month.slice(5) + '月')
-  const income = points.map((p) => Number(p.income))
+  const income = points.map((p) => Number(p.income)) // 金额转数值（接口返回的多为字符串）
   const expense = points.map((p) => Number(p.expense))
+  // 6 个月收入支出全为 0 → 判定无数据，交给 ChartBox 显示空态
   trendEmpty.value = points.every((p) => Number(p.income) === 0 && Number(p.expense) === 0)
   trendOption.value = {
     color: [TYPE_COLORS[1], TYPE_COLORS[2]],
@@ -81,10 +88,10 @@ function buildTrend(points) {
 
 /** 支出分类环形图：Top 8 + 其他，分类色固定顺序；小扇区名称靠图例+悬浮提示 */
 function buildPie(cats) {
-  const items = (cats || []).slice().sort((a, b) => Number(b.total) - Number(a.total))
-  pieEmpty.value = items.length === 0
-  const top = items.slice(0, 8)
-  const rest = items.slice(8)
+  const items = (cats || []).slice().sort((a, b) => Number(b.total) - Number(a.total)) // 按支出额降序排列
+  pieEmpty.value = items.length === 0 // 一条分类数据都没有 → 环形图空态
+  const top = items.slice(0, 8) // 前 8 名：颜色按固定色板轮换，保证同一分类颜色稳定
+  const rest = items.slice(8) // 其余分类合并成灰色"其他"扇区（值加总）
   const data = top.map((c, i) => ({
     name: c.categoryName,
     value: Number(c.total),
@@ -100,6 +107,7 @@ function buildPie(cats) {
   }
   const total = items.reduce((s, c) => s + Number(c.total), 0)
   pieOption.value = {
+    // 悬浮提示：marker 色点 + 分类名 + 金额 + 占比；escHtml 转义分类名防自定义名称注入 HTML
     tooltip: {
       ...itemTooltip(),
       formatter: (p) =>
@@ -121,6 +129,7 @@ function buildPie(cats) {
         center: ['38%', '50%'],
         padAngle: 2,
         itemStyle: { borderColor: '#fcfcfb', borderWidth: 2 },
+        // 扇区标签：占比 ≥8% 才直接显示"名称+百分比"，小扇区只靠右侧图例与悬浮提示区分
         label: {
           color: INK.secondary,
           fontSize: 12,
@@ -135,6 +144,7 @@ function buildPie(cats) {
   void total
 }
 
+// 供多个卡片头部"查看明细 / 全部流水"链接共用：统一跳转到收支管理页
 function goTransactions() {
   router.push('/transactions')
 }
@@ -145,7 +155,7 @@ const greeting =
   (hour < 6 ? '夜深了' : hour < 12 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好') +
   `，${store.user?.nickname || store.user?.username || '朋友'}`
 
-const monthChip = dayjs().format('YYYY年M月')
+const monthChip = dayjs().format('YYYY年M月') // 右上角"本月"徽标文案，如 2026年9月
 </script>
 
 <template>
@@ -216,6 +226,7 @@ const monthChip = dayjs().format('YYYY年M月')
               <el-link type="primary" :underline="false" @click="goTransactions">全部流水</el-link>
             </div>
           </template>
+          <!-- 表格单元格普遍借助工具函数格式化：bizDate 走 date() 转日期、金额走 money() 千分位 -->
           <el-table :data="recent" size="small">
             <el-table-column prop="bizDate" label="日期" width="110">
               <template #default="{ row }">{{ date(row.bizDate) }}</template>
@@ -223,6 +234,7 @@ const monthChip = dayjs().format('YYYY年M月')
             <el-table-column prop="categoryName" label="分类" min-width="110" show-overflow-tooltip />
             <el-table-column label="金额" width="130" align="right">
               <template #default="{ row }">
+                <!-- 收支配色区分：type=1 收入带 + 号、type=2 支出带 - 号（金额已由 money() 格式化） -->
                 <span :class="row.type === 1 ? 'amount-income' : 'amount-expense'" class="num-cell">
                   {{ row.type === 1 ? '+' : '-' }}{{ money(row.amount) }}
                 </span>
@@ -261,6 +273,8 @@ const monthChip = dayjs().format('YYYY年M月')
 </template>
 
 <style scoped>
+/* ===== 仪表盘样式：白底卡片 + 墨绿点缀，色彩与全局绿色主题一致 ===== */
+/* 通用行距：加在每个卡片 el-row 上，拉开各区块之间的垂直间距 */
 .row-gap {
   margin-top: 12px;
 }
@@ -400,6 +414,7 @@ const monthChip = dayjs().format('YYYY年M月')
   color: var(--ink-primary);
 }
 
+/* 预警描述：最多显示两行，超出自动省略 */
 .warn-desc {
   font-size: 12px;
   color: var(--ink-secondary);

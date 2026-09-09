@@ -28,12 +28,15 @@
   --st-critical: #d03b3b;
 }
 
+/* ===== 基础重置 ===== */
 * {
+  /* 去掉浏览器默认内外边距；border-box 使元素宽高包含内边距与边框，布局计算更直观 */
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+/* html/body/#app 三级容器撑满视口高度：后台布局依赖它实现「侧栏/页头固定，内容区自适应滚动」 */
 html,
 body,
 #app {

@@ -23,6 +23,7 @@ import { INK, SERIES_COLORS, baseAxis, itemTooltip, moneyAxisLabel, escHtml } fr
  */
 const store = useUserStore()
 
+// 常量：资产类型固定枚举；还款方式（后端存英文编码）→ 中文显示名映射
 const ASSET_TYPES = ['房产', '存款', '汽车', '其他']
 /** 类型 → 固定色（颜色跟随实体，不随筛选重排） */
 const TYPE_COLOR = {
@@ -33,6 +34,7 @@ const TYPE_COLOR = {
 }
 const REPAY_LABELS = { equal_installment: '等额本息', equal_principal: '等额本金' }
 
+// ===== 页面数据状态：汇总、资产/贷款列表、类型分布图（option + 空态标记） =====
 const loading = ref(false)
 const summary = ref({})
 const assets = ref([])
@@ -42,6 +44,7 @@ const byTypeEmpty = ref(false)
 
 onMounted(loadAll)
 
+// ===== 加载页面数据（并发拉取汇总/资产/贷款三份数据，返回后统一刷新） =====
 async function loadAll() {
   loading.value = true
   try {
@@ -49,13 +52,15 @@ async function loadAll() {
     summary.value = sum
     assets.value = as
     loans.value = ls
-    buildByType(sum.byType)
+    buildByType(sum.byType) // 类型分布图只需汇总结果里的 byType
   } finally {
     loading.value = false
   }
 }
 
+// ===== ECharts option 构建：资产类型分布环形图 =====
 function buildByType(byType) {
+  // 只画金额 > 0 的类型，避免环形图出现 0 值扇区
   const items = (byType || []).filter((t) => Number(t.total) > 0)
   byTypeEmpty.value = items.length === 0
   byTypeOption.value = {
@@ -84,6 +89,7 @@ function buildByType(byType) {
   }
 }
 
+// 资产类型 → Element Plus el-tag 颜色（warning=房产 / primary=存款 / info=其他）
 function typeTag(type) {
   if (type === '房产') return 'warning'
   if (type === '存款') return 'primary'
@@ -114,17 +120,19 @@ function openAssetEdit(row) {
   Object.assign(assetForm, {
     name: row.name,
     assetType: row.assetType,
-    value: Number(row.value),
+    value: Number(row.value), // 后端估值可能是字符串，转成数字供 el-input-number 使用
     purchaseDate: row.purchaseDate || null,
     note: row.note || '',
   })
   assetDialog.value = true
 }
 
+// 保存资产：先整体校验（必填项/格式），再按是否编辑态走更新或新增接口
 async function saveAsset() {
   await assetFormRef.value.validate()
   assetSaving.value = true
   try {
+    // 空字段统一转 null 提交，避免覆盖后端已有数据
     const payload = {
       name: assetForm.name,
       assetType: assetForm.assetType,
@@ -195,6 +203,7 @@ function openLoanCreate() {
   loanDialog.value = true
 }
 
+// 回填贷款行数据：金额字符串转数字；利率后端按小数存（如 0.038），×100 换算成百分数（3.8）便于编辑
 function openLoanEdit(row) {
   editingLoanId.value = row.id
   Object.assign(loanForm, {
@@ -210,10 +219,12 @@ function openLoanEdit(row) {
   loanDialog.value = true
 }
 
+// 保存贷款：提交后后端会按还款方式自动测算月供与整张还款计划
 async function saveLoan() {
   await loanFormRef.value.validate()
   loanSaving.value = true
   try {
+    // 利率由“百分数”还原为“小数”（如 3.8 → 0.038）再提交，与后端存储口径一致
     const payload = {
       name: loanForm.name,
       principal: loanForm.principal,
@@ -257,11 +268,13 @@ const plan = ref(null)
 const planOption = ref({})
 const planEmpty = ref(false)
 
+// 查看还款计划：调后端一次算出整张计划表（月供/利息合计/逐期明细），再据此绘图
 async function openPlan(row) {
   planDialog.value = true
   planLoading.value = true
   try {
     const data = await loanPlan(row.id)
+    // 补一个 loanName 字段，只用于弹窗标题展示
     plan.value = { ...data, loanName: row.name }
     buildPlanChart(data)
   } finally {
@@ -269,7 +282,9 @@ async function openPlan(row) {
   }
 }
 
+// ===== ECharts option 构建：剩余本金逐期递减曲线 =====
 function buildPlanChart(data) {
+  // 空态：没有任何分期数据时不画图，只显示占位
   planEmpty.value = !data.items?.length
   const sample = data.items || []
   // 期数多时抽稀，保证折线清晰（≤60 期全画，否则每 6 期取一点，末尾保留）
@@ -316,6 +331,7 @@ function buildPlanChart(data) {
   }
 }
 
+// 弹窗顶部摘要卡数据：月供（首月）/利息合计/本息合计，均来自还款计划接口
 const planSummary = computed(() => {
   if (!plan.value) return null
   return [
@@ -365,6 +381,7 @@ const planSummary = computed(() => {
           <template #default="{ row }">{{ date(row.purchaseDate) }}</template>
         </el-table-column>
         <el-table-column prop="note" label="备注" min-width="120" show-overflow-tooltip />
+        <!-- 操作列：仅管理员可编辑/删除资产（普通成员整表只读） -->
         <el-table-column label="操作" width="120" v-if="store.isAdmin">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openAssetEdit(row)">编辑</el-button>
@@ -391,9 +408,11 @@ const planSummary = computed(() => {
           <template #default="{ row }">{{ row.annualRate === null ? '--' : (Number(row.annualRate) * 100).toFixed(2) + '%' }}</template>
         </el-table-column>
         <el-table-column prop="termMonths" label="期数(月)" width="90" align="right" />
+        <!-- 还款方式列：等额本息月供固定；等额本金月供逐月递减，故列表中标注首月 -->
         <el-table-column label="还款方式" width="100">
           <template #default="{ row }">{{ REPAY_LABELS[row.repaymentType] || row.repaymentType }}</template>
         </el-table-column>
+        <!-- 月供列：等额本金方式下各月不同，此处展示首月月供并加“(首月)”标注 -->
         <el-table-column label="月供" width="130" align="right">
           <template #default="{ row }">
             <span class="num-cell">¥{{ money(row.monthlyPayment) }}</span>
@@ -404,6 +423,7 @@ const planSummary = computed(() => {
           <template #default="{ row }"><span class="num-cell">¥{{ money(row.remainingPrincipal) }}</span></template>
         </el-table-column>
         <el-table-column prop="lender" label="机构" min-width="110" show-overflow-tooltip />
+        <!-- 操作列：管理员可查看还款计划/编辑/删除；下方 v-else 分支对普通成员只保留“还款计划”查看 -->
         <el-table-column label="操作" width="190" v-if="store.isAdmin">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openPlan(row)">还款计划</el-button>
@@ -463,6 +483,7 @@ const planSummary = computed(() => {
         <el-form-item label="本金" prop="principal">
           <el-input-number v-model="loanForm.principal" :min="0.01" :precision="2" :step="10000" controls-position="right" style="width: 100%" />
         </el-form-item>
+        <!-- 利率：界面按“百分数”录入（如 3.8 表示 3.8%），保存时 ÷100 转成小数提交 -->
         <el-form-item label="年利率(%)">
           <el-input-number v-model="loanForm.annualRatePct" :min="0" :max="100" :precision="2" :step="0.1" controls-position="right" style="width: 100%" />
         </el-form-item>
@@ -495,6 +516,7 @@ const planSummary = computed(() => {
     <!-- 还款计划弹窗 -->
     <el-dialog v-model="planDialog" :title="`还款计划 ─ ${plan?.loanName || ''}`" width="760px">
       <div v-loading="planLoading">
+        <!-- 摘要：月供/利息合计/本息合计/还款方式，来自后端测算结果 -->
         <div v-if="plan" class="plan-summary">
           <div v-for="s in planSummary" :key="s.label" class="plan-summary-item">
             <div class="plan-summary-label">{{ s.label }}</div>
@@ -505,7 +527,9 @@ const planSummary = computed(() => {
             <div class="plan-summary-value">{{ REPAY_LABELS[plan.repaymentType] }}</div>
           </div>
         </div>
+        <!-- 剩余本金曲线：期数很多时脚本内做了抽稀采样，保证折线清晰可读 -->
         <ChartBox :option="planOption" :empty="planEmpty" height="220px" />
+        <!-- 逐期明细表：每期的月供/本金/利息/剩余本金由后端按还款方式逐期计算 -->
         <el-table :data="plan?.items || []" size="small" max-height="320" stripe>
           <el-table-column prop="period" label="期次" width="80" align="right" />
           <el-table-column label="月供" width="120" align="right">

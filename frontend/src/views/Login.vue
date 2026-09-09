@@ -1,4 +1,8 @@
 <script setup>
+/**
+ * 登录页：左侧品牌玻璃插画（纯展示）+ 右侧登录卡片。
+ * 提交流程：表单校验 → store.login 写入登录态 → fetchContext 补齐家庭/成员 → 跳转
+ */
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
@@ -8,24 +12,28 @@ const store = useUserStore()
 const router = useRouter()
 const route = useRoute()
 
-const formRef = ref(null)
-const loading = ref(false)
-const form = reactive({ username: '', password: '' })
+// ===== 表单状态与校验规则 =====
+const formRef = ref(null) // 表单组件引用，用它触发整体校验 validate()
+const loading = ref(false) // 提交中标记：登录按钮转圈并禁用，防重复提交
+const form = reactive({ username: '', password: '' }) // 与输入框双向绑定的表单数据
 
+// 校验规则：用户名/密码均必填，失焦(blur)时即时提示
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 
+// ===== 登录提交 =====
 async function submit() {
-  await formRef.value.validate()
+  await formRef.value.validate() // 校验不通过会抛异常，直接中断、不会发起登录请求
   loading.value = true
   try {
-    await store.login({ ...form })
-    await store.fetchContext()
+    await store.login({ ...form }) // 调登录接口，成功则 token/用户信息写入全局 store
+    await store.fetchContext() // 补齐家庭与成员上下文，供主页/布局页直接使用
+    // 被路由守卫拦回时带 ?redirect= 参数，登录成功后回跳原目标页；否则进首页仪表盘
     router.push(route.query.redirect || '/dashboard')
   } finally {
-    loading.value = false
+    loading.value = false // 无论成败都恢复按钮，避免登录失败后按钮一直转圈
   }
 }
 </script>
@@ -122,6 +130,7 @@ async function submit() {
           <p class="card-sub">家庭收支管理系统</p>
         </div>
 
+        <!-- 登录表单：回车(@keyup.enter)或点按钮都可触发 submit；校验规则见脚本 rules -->
         <el-form ref="formRef" :model="form" :rules="rules" size="large" @keyup.enter="submit">
           <el-form-item prop="username">
             <el-input
@@ -140,11 +149,13 @@ async function submit() {
               :prefix-icon="Lock"
             />
           </el-form-item>
+          <!-- 登录按钮：:loading 期间自动禁用并转圈，防止连点重复提交 -->
           <el-button type="primary" size="large" class="login-btn" :loading="loading" @click="submit">
             登 录
           </el-button>
         </el-form>
 
+        <!-- 无账号入口：点击文字链跳转注册页 -->
         <div class="card-footer">
           还没有账号？<router-link to="/register">注册新家庭</router-link>
         </div>

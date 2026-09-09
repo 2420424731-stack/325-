@@ -1,4 +1,8 @@
 <script setup>
+/**
+ * 注册页：一次填完"账号 + 家庭"两类信息。
+ * 注册接口会同时创建 账号 / 家庭 / 户主成员 / 内置收支分类，成功后即自动登录进首页
+ */
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
@@ -7,8 +11,10 @@ import { User, Lock, HomeFilled, Avatar } from '@element-plus/icons-vue'
 const store = useUserStore()
 const router = useRouter()
 
-const formRef = ref(null)
-const loading = ref(false)
+// ===== 表单状态与校验规则 =====
+const formRef = ref(null) // 表单组件引用，用它触发整体校验 validate()
+const loading = ref(false) // 提交中标记：按钮转圈防重复提交
+// 注册表单数据：confirm 是"确认密码"，仅用于二次校验、不会提交给后端；nickname 选填
 const form = reactive({
   username: '',
   password: '',
@@ -17,6 +23,8 @@ const form = reactive({
   familyName: '',
 })
 
+// 校验规则：用户名/密码必填且有长度限制；confirm 用自定义 validator 比对两次密码；
+// 家庭名必填，因为注册时会以它为名创建家庭账本
 const rules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
@@ -29,6 +37,7 @@ const rules = {
   confirm: [
     { required: true, message: '请再次输入密码', trigger: 'blur' },
     {
+      // 自定义校验：两次输入的密码不一致时报错（cb 传入 Error 即校验失败）
       validator: (_, v, cb) => (v === form.password ? cb() : cb(new Error('两次输入的密码不一致'))),
       trigger: 'blur',
     },
@@ -36,21 +45,22 @@ const rules = {
   familyName: [{ required: true, message: '请输入家庭名称（如：张三家）', trigger: 'blur' }],
 }
 
+// ===== 提交注册（成功后自动登录并进入首页） =====
 async function submit() {
-  await formRef.value.validate()
+  await formRef.value.validate() // 校验不通过抛异常中断，不会发出请求
   loading.value = true
   try {
     // 注册即创建账号+家庭+户主成员+内置分类，成功后自动登录
     await store.register({
       username: form.username,
       password: form.password,
-      nickname: form.nickname || form.username,
+      nickname: form.nickname || form.username, // 昵称留空时回退为用户名
       familyName: form.familyName,
     })
-    await store.fetchContext()
-    router.push('/dashboard')
+    await store.fetchContext() // 拉取新创建的家庭上下文
+    router.push('/dashboard') // 已自动登录，无需再走登录页，直接进首页
   } finally {
-    loading.value = false
+    loading.value = false // 无论成败都恢复按钮，失败时用户可原地修改重试
   }
 }
 </script>
@@ -61,6 +71,7 @@ async function submit() {
     <span class="blob blob-1"></span>
     <span class="blob blob-2"></span>
 
+    <!-- 居中白色圆角卡片：账号与家庭信息一屏填完 -->
     <div class="register-card">
       <!-- 金币 logo + 标题 -->
       <div class="card-brand">
@@ -71,6 +82,7 @@ async function submit() {
         <p class="card-sub">注册即创建家庭账本 · 自动内置常用收支分类</p>
       </div>
 
+      <!-- 注册表单：回车或点按钮均可提交；用户名/密码/家庭名等校验规则见脚本 rules -->
       <el-form ref="formRef" :model="form" :rules="rules" label-width="0" size="large" @keyup.enter="submit">
         <el-form-item prop="username">
           <el-input v-model="form.username" placeholder="用户名（3-20 位）" clearable :prefix-icon="User" />
@@ -87,11 +99,13 @@ async function submit() {
         <el-form-item prop="nickname">
           <el-input v-model="form.nickname" placeholder="你的昵称（选填，默认同用户名）" clearable :prefix-icon="Avatar" />
         </el-form-item>
+        <!-- 提交按钮：:loading 期间自动禁用，防止重复点击注册出多个家庭 -->
         <el-button type="primary" size="large" class="register-btn" :loading="loading" @click="submit">
           注册并创建家庭
         </el-button>
       </el-form>
 
+      <!-- 底部：已有账号则点击文字链直接回登录页 -->
       <div class="card-footer">
         已有账号？<router-link to="/login">返回登录</router-link>
       </div>
@@ -125,6 +139,7 @@ async function submit() {
 .blob-1 { width: 380px; height: 380px; top: -120px; left: 18%; }
 .blob-2 { width: 300px; height: 300px; right: -90px; bottom: -80px; }
 
+/* 中央白色圆角卡片：z-index 抬到背景气泡之上，保证内容可点击 */
 .register-card {
   position: relative;
   z-index: 1;

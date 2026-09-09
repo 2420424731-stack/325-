@@ -25,12 +25,15 @@ import {
  */
 const router = useRouter()
 
+// ===== 页面状态 =====
+// month 为当前分析月份（默认本月，切换月份即整页重载）；cmp/anomalyList/reportText 对应三个分析接口的结果
 const month = ref(currentMonth())
 const loading = ref(true)
 const cmp = ref(null)
 const anomalyList = ref([])
 const reportText = ref('')
 
+// 各图表 ECharts option 与空态标记：option 交给 ChartBox 渲染，empty 为 true 时显示“暂无数据”占位
 const trendOption = ref({})
 const trendEmpty = ref(false)
 const barOption = ref({})
@@ -40,12 +43,14 @@ const merchantEmpty = ref(false)
 const regionOption = ref({})
 const regionEmpty = ref(false)
 
+// 预警级别元数据：模板据此渲染徽章的文案、背景色与图标
 const LEVEL_META = {
   danger: { label: '严重', color: '#d03b3b', icon: '⛔' },
   warning: { label: '提示', color: '#fab219', icon: '⚠️' },
   info: { label: '参考', color: '#898781', icon: '💡' },
 }
 
+// 三个 computed 结构相同：把后端返回的 收入/支出/结余 环比同比数值，转成指标卡 chips 数组
 const incomeChips = computed(() =>
   cmp.value
     ? [
@@ -73,6 +78,7 @@ const balanceChips = computed(() =>
 
 onMounted(loadAll)
 
+// ===== 加载页面数据（并发拉取：比较/预警/报告三个分析接口 + 趋势/分类/商家/片区统计） =====
 async function loadAll() {
   loading.value = true
   try {
@@ -101,13 +107,17 @@ async function loadAll() {
   }
 }
 
+// ===== ECharts option 构建：近 12 个月收支趋势 =====
+// 说明：baseAxis/baseTooltip/lineSeries 等来自 utils/charts 的公共底座，保证全站图表风格统一
 function buildTrend(points) {
+  // 空态：近 12 个月收支全为 0 时不再画折线，直接显示空占位
   trendEmpty.value = points.every((p) => Number(p.income) === 0 && Number(p.expense) === 0)
   trendOption.value = {
     color: [TYPE_COLORS[1], TYPE_COLORS[2]],
     tooltip: { ...baseTooltip(), valueFormatter: (v) => `¥${money(v)}` },
     legend: { top: 0, right: 8, itemWidth: 14, itemHeight: 8, textStyle: { color: INK.secondary } },
     ...baseAxis(),
+    // 后端返回的 month 形如 "YYYY-MM"，slice(5) 截出 "MM" 拼成 “08月” 作 X 轴刻度
     xAxis: { ...baseAxis().xAxis, data: points.map((p) => p.month.slice(5) + '月') },
     yAxis: { ...baseAxis().yAxis, axisLabel: moneyAxisLabel() },
     series: [
@@ -119,6 +129,7 @@ function buildTrend(points) {
 
 /** 分类柱状图：Top 8，分类色固定顺序 */
 function buildCategoryBar(cats) {
+  // 先浅拷贝再按金额降序取 Top 8（避免 sort 原地改动接口返回的数组）
   const items = (cats || []).slice().sort((a, b) => Number(b.total) - Number(a.total)).slice(0, 8)
   barEmpty.value = items.length === 0
   barOption.value = {
@@ -126,10 +137,12 @@ function buildCategoryBar(cats) {
       ...itemTooltip(),
       formatter: (p) => `${p.marker}${escHtml(p.name)}：¥${money(p.value)}（${p.data.count} 笔）`,
     },
+    // tooltip 中拼接了用户输入的分类名，escHtml 转义防 XSS（商家/片区图的 tooltip 同理）
     ...baseAxis(),
     xAxis: {
       ...baseAxis().xAxis,
       data: items.map((c) => c.categoryName),
+      // interval: 0 保证每个分类都显示刻度；分类过多时倾斜 25° 防文字重叠
       axisLabel: { color: INK.muted, interval: 0, fontSize: 11, rotate: items.length > 6 ? 25 : 0 },
     },
     yAxis: { ...baseAxis().yAxis, axisLabel: moneyAxisLabel() },
@@ -161,6 +174,7 @@ function buildMerchant(items) {
       ...itemTooltip(),
       formatter: (p) => `${p.marker}${escHtml(p.name)}：¥${money(p.value)}（${p.data.count} 笔）`,
     },
+    // 横向条形图布局：X 轴为金额数值轴，Y 轴按商家名列；数据已反转，金额最大者显示在最上方
     grid: { left: 8, right: 40, top: 8, bottom: 4, containLabel: true },
     xAxis: { type: 'value', splitLine: { lineStyle: { color: INK.grid } }, axisLabel: { color: INK.muted } },
     yAxis: {
@@ -194,6 +208,7 @@ function buildMerchant(items) {
 
 /** 片区分布：横向条形，单序列 slot3 青（颜色跟随实体） */
 function buildRegion(items) {
+  // 金额降序取 Top 8 后再反转，横向条形图中金额最大者排在最上方（与商家图同一套路）
   const top = (items || []).slice().sort((a, b) => Number(b.total) - Number(a.total)).slice(0, 8).reverse()
   regionEmpty.value = top.length === 0
   regionOption.value = {
@@ -233,6 +248,7 @@ function buildRegion(items) {
 }
 
 /** 钻取到流水列表（设计文档 8.3：所有分析数据一键钻取） */
+// 后端对可钻取条目返回 drillCategoryId（按分类筛）或 drillTag（按关键词筛），跳转收支页时带上对应条件
 function drill(item) {
   if (item.drillCategoryId) {
     router.push({ path: '/transactions', query: { categoryId: item.drillCategoryId } })
@@ -270,6 +286,7 @@ function drill(item) {
         <StatCard title="本月结余" :value="cmp?.balance.current || 0" :chips="balanceChips" />
       </el-col>
     </el-row>
+    <!-- 概览结论：后端按规则汇总的一段当月总结，仅在有内容时显示 -->
     <div v-if="cmp?.conclusion" class="conclusion">
       {{ month }} 概览：{{ cmp.conclusion }}
     </div>
@@ -279,6 +296,7 @@ function drill(item) {
       <el-col :span="12">
         <el-card shadow="never">
           <template #header><span class="card-title">近 12 个月收支趋势</span></template>
+          <!-- 数据全为 0 时由 :empty 置空态，ChartBox 显示“暂无数据”占位（其余图表同理） -->
           <ChartBox :option="trendOption" :empty="trendEmpty" height="300px" />
         </el-card>
       </el-col>
@@ -311,6 +329,7 @@ function drill(item) {
       <el-col :span="10">
         <el-card shadow="never">
           <template #header><span class="card-title">预警与关注项</span></template>
+          <!-- 预警列表：每条含级别徽章/标题/超幅/说明/建议；带 drillable 样式（可钻取）的项点击跳转流水页 -->
           <el-empty v-if="!anomalyList.length" description="本月没有预警与关注项" :image-size="64" />
           <div v-else class="anomaly-list">
             <div
@@ -343,6 +362,7 @@ function drill(item) {
               <el-button link type="primary" @click="loadAll">重新生成</el-button>
             </div>
           </template>
+          <!-- 报告正文：后端按规则生成的自然语言段落，文本过长时卡片内滚动查看 -->
           <div v-if="reportText" class="report-text">{{ reportText }}</div>
           <el-empty v-else description="暂无报告" :image-size="64" />
         </el-card>

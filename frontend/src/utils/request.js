@@ -8,11 +8,13 @@ import { ElMessage } from 'element-plus'
  * - code=401（未登录/过期）清除凭证回登录页
  */
 const request = axios.create({
-  baseURL: '/api',
-  timeout: 15000,
+  baseURL: '/api', // 统一接口前缀：开发环境下由 Vite 代理转发到后端，规避跨域
+  timeout: 15000, // 单次请求 15 秒超时，防止接口卡死拖住页面
 })
 
+// ===== 请求拦截器：每次发请求前自动携带登录凭证 =====
 request.interceptors.request.use((config) => {
+  // 从 localStorage 取 token 放进 Authorization 头（不带 Bearer 前缀，与后端 Sa-Token 约定一致）
   const token = localStorage.getItem('token')
   if (token) {
     config.headers.Authorization = token
@@ -20,6 +22,9 @@ request.interceptors.request.use((config) => {
   return config
 })
 
+// ===== 响应拦截器：统一解包与异常兜底 =====
+// 后端统一返回 { code, message, data }。code=200 时业务代码拿到的直接是 data；
+// code=401 视为凭证失效；其余 code 与网络错误统一弹出 message 提示并 reject
 request.interceptors.response.use(
   (res) => {
     const body = res.data

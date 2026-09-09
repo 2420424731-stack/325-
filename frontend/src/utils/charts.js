@@ -30,6 +30,7 @@ export const TYPE_COLORS = {
   2: '#eb6834', // 支出 slot2 橙
 }
 
+/** 通用悬浮提示框：axis 触发，光标扫过坐标轴时同列各系列一起提示（折线/柱状图用） */
 export function baseTooltip() {
   return {
     trigger: 'axis',
@@ -43,6 +44,7 @@ export function baseTooltip() {
   }
 }
 
+/** 单项悬浮提示框：item 触发，鼠标悬停单个数据块时只提示该块（饼图/环图用） */
 export function itemTooltip() {
   return {
     trigger: 'item',

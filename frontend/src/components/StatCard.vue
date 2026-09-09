@@ -17,6 +17,8 @@ const props = defineProps({
   accent: { type: String, default: 'balance' },
 })
 
+// 环比/同比角标配色：数值正负决定涨/跌色；支出类指标语义相反——支出上涨反而是坏消息，
+// 所以由父组件传 invert 翻转“好/坏”判定（颜色仍表达好坏，而不是单纯的正负）
 function chipClass(v) {
   if (v === null || v === undefined) return 'chip-flat'
   const good = props.invert ? v < 0 : v > 0
@@ -24,11 +26,13 @@ function chipClass(v) {
   return good ? 'chip-up' : 'chip-down'
 }
 
+// 环比/同比旁的箭头字符：上升 ▲、下降 ▼；数据缺失或为 0 时显示占位符「—」
 function chipArrow(v) {
   if (v === null || v === undefined || v === 0) return '—'
   return v > 0 ? '▲' : '▼'
 }
 
+// 主数值展示格式：响应式计算，千分位 + 两位小数（与 utils/format.js 的 money 规则一致）
 const displayValue = computed(() =>
   Number(props.value).toLocaleString('zh-CN', {
     minimumFractionDigits: 2,
@@ -38,14 +42,19 @@ const displayValue = computed(() =>
 </script>
 
 <template>
+  <!-- 指标卡骨架：class 里的 accent-income/expense/balance 决定顶部饰条与小圆点的主题色 -->
   <div class="stat-card" :class="`accent-${accent}`">
+    <!-- 顶部渐变饰条（纯装饰） -->
     <span class="stat-strip"></span>
+    <!-- 指标名：带色小圆点 + 标题文字 -->
     <div class="stat-title">
       <span class="stat-dot"></span>{{ title }}
     </div>
+    <!-- 主数值区：前缀符号（¥）+ 千分位格式化后的数字 -->
     <div class="stat-value">
       <span class="stat-prefix">{{ prefix }}</span>{{ displayValue }}
     </div>
+    <!-- 对比角标区：环比/同比等一排小标签，无 chips 时不渲染 -->
     <div v-if="chips.length" class="stat-chips">
       <span v-for="c in chips" :key="c.label" class="stat-chip" :class="chipClass(c.value)">
         {{ c.label }} {{ chipArrow(c.value) }}{{ signedPct(c.value) }}
@@ -55,6 +64,7 @@ const displayValue = computed(() =>
 </template>
 
 <style scoped>
+/* 卡片主体：白底 + 绿细边 + 圆角 + 柔和投影；hover 时轻微上浮增强点击感 */
 .stat-card {
   position: relative;
   padding: 20px 22px 18px;
