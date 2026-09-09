@@ -106,7 +106,7 @@ public class FamilyMemberServiceImpl implements FamilyMemberService {
                         .eq(FamilyMember::getId, id)
                         .eq(FamilyMember::getFamilyId, scope.familyId()));
         if (member == null) {
-            throw new BizException("成员不存在");
+            throw new BizException(404, "成员不存在");
         }
         return member;
     }

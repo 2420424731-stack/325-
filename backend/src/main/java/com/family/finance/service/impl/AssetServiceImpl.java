@@ -113,10 +113,19 @@ public class AssetServiceImpl implements AssetService {
         if (dto.getAssetType() != null && !a.getAssetType().equals(dto.getAssetType())) {
             throw new BizException(400, "v1 不支持修改资产类型，请删除后重建");
         }
-        a.setName(dto.getName());
-        a.setValue(dto.getValue() == null ? BigDecimal.ZERO : dto.getValue());
-        a.setPurchaseDate(dto.getPurchaseDate());
-        a.setNote(dto.getNote());
+        // 局部更新：仅覆盖已传字段，未传字段保持原值
+        if (dto.getName() != null) {
+            a.setName(dto.getName());
+        }
+        if (dto.getValue() != null) {
+            a.setValue(dto.getValue());
+        }
+        if (dto.getPurchaseDate() != null) {
+            a.setPurchaseDate(dto.getPurchaseDate());
+        }
+        if (dto.getNote() != null) {
+            a.setNote(dto.getNote());
+        }
         assetMapper.updateById(a);
         return toVO(a);
     }
@@ -146,7 +155,7 @@ public class AssetServiceImpl implements AssetService {
     private Asset requireAsset(Long id) {
         Asset a = assetMapper.selectById(id);
         if (a == null || !a.getFamilyId().equals(scope.familyId())) {
-            throw new BizException("资产不存在");
+            throw new BizException(404, "资产不存在");
         }
         return a;
     }

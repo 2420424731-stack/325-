@@ -5,7 +5,7 @@ import com.family.finance.dto.AssetDTO;
 import com.family.finance.service.AssetService;
 import com.family.finance.vo.AssetSummaryVO;
 import com.family.finance.vo.AssetVO;
-import jakarta.validation.Valid;
+import org.springframework.validation.annotation.Validated;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,13 +42,14 @@ public class AssetController {
 
     /** 新增资产（仅管理员） */
     @PostMapping
-    public Result<AssetVO> create(@Valid @RequestBody AssetDTO dto) {
+    public Result<AssetVO> create(@Validated(AssetDTO.Create.class) @RequestBody AssetDTO dto) {
         return Result.ok(assetService.create(dto));
     }
 
     /** 修改资产（仅管理员；v1 不支持改类型） */
     @PutMapping("/{id}")
-    public Result<AssetVO> update(@PathVariable Long id, @Valid @RequestBody AssetDTO dto) {
+    public Result<AssetVO> update(@PathVariable Long id,
+                               @Validated(AssetDTO.Update.class) @RequestBody AssetDTO dto) {
         return Result.ok(assetService.update(id, dto));
     }
 

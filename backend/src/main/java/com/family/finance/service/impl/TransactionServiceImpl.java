@@ -225,7 +225,7 @@ public class TransactionServiceImpl implements TransactionService {
                         .eq(Transaction::getId, id)
                         .eq(Transaction::getFamilyId, scope.familyId()));
         if (t == null) {
-            throw new BizException("记录不存在");
+            throw new BizException(404, "记录不存在");
         }
         return t;
     }

@@ -184,7 +184,7 @@ public class LoanServiceImpl implements LoanService {
     private Loan requireLoan(Long id) {
         Loan l = loanMapper.selectById(id);
         if (l == null || !l.getFamilyId().equals(scope.familyId())) {
-            throw new BizException("贷款不存在");
+            throw new BizException(404, "贷款不存在");
         }
         return l;
     }

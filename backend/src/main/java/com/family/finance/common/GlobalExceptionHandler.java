@@ -4,9 +4,11 @@ import cn.dev33.satoken.exception.NotLoginException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 全局异常处理器：统一转换为 {code, message, data} 错误响应
@@ -41,6 +43,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public Result<Void> handleNotReadable(HttpMessageNotReadableException e) {
         return Result.error(400, "请求体格式错误");
+    }
+
+    /** 未匹配路由：返回 404，避免落入兜底 500 */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public Result<Void> handleNoResource(NoResourceFoundException e) {
+        return Result.error(404, "接口不存在");
+    }
+
+    /** 路径存在但请求方法不支持（如 GET 一个仅支持 PUT/DELETE 的 id 路由）：视为接口不存在 */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public Result<Void> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        return Result.error(404, "接口不存在");
     }
 
     /** 兜底异常 */

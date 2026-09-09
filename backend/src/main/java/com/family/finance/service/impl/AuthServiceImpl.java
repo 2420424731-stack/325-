@@ -62,7 +62,7 @@ public class AuthServiceImpl implements AuthService {
         Long exist = userMapper.selectCount(
                 new LambdaQueryWrapper<User>().eq(User::getUsername, dto.getUsername()));
         if (exist > 0) {
-            throw new BizException("用户名已存在");
+            throw new BizException(400, "用户名已存在");
         }
 
         // 2. 创建账号（管理员 = 户主）

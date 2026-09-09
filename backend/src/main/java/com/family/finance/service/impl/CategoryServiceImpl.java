@@ -153,13 +153,13 @@ public class CategoryServiceImpl implements CategoryService {
     public void delete(Long id) {
         scope.requireAdmin();
         Category category = requireCategory(id);
-        if (category.getIsSystem() == 1) {
-            throw new BizException(400, "系统内置分类不可删除，可停用（编辑状态）");
-        }
         Long childCount = categoryMapper.selectCount(
                 new LambdaQueryWrapper<Category>().eq(Category::getParentId, id));
         if (childCount > 0) {
             throw new BizException(400, "该分类下存在子分类，请先删除子分类");
+        }
+        if (category.getIsSystem() == 1) {
+            throw new BizException(400, "系统内置分类不可删除，可停用（编辑状态）");
         }
         Long used = transactionMapper.selectCount(
                 new LambdaQueryWrapper<Transaction>()
@@ -182,7 +182,7 @@ public class CategoryServiceImpl implements CategoryService {
                         .eq(Category::getId, id)
                         .eq(Category::getFamilyId, scope.familyId()));
         if (category == null) {
-            throw new BizException("分类不存在");
+            throw new BizException(404, "分类不存在");
         }
         return category;
     }

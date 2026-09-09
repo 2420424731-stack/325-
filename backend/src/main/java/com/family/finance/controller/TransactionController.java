@@ -7,8 +7,8 @@ import com.family.finance.dto.TransactionQuery;
 import com.family.finance.service.TransactionService;
 import com.family.finance.vo.TransactionExportVO;
 import com.family.finance.vo.TransactionVO;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,13 +48,14 @@ public class TransactionController {
 
     /** 新增 */
     @PostMapping
-    public Result<TransactionVO> create(@Valid @RequestBody TransactionDTO dto) {
+    public Result<TransactionVO> create(@Validated(TransactionDTO.Create.class) @RequestBody TransactionDTO dto) {
         return Result.ok(transactionService.create(dto));
     }
 
     /** 修改（局部更新） */
     @PutMapping("/{id}")
-    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody TransactionDTO dto) {
+    public Result<Void> update(@PathVariable Long id,
+                               @Validated(TransactionDTO.Update.class) @RequestBody TransactionDTO dto) {
         transactionService.update(id, dto);
         return Result.ok();
     }

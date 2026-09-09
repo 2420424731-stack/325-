@@ -29,7 +29,7 @@ public class FamilyServiceImpl implements FamilyService {
         scope.requireAdmin();
         Family family = familyMapper.selectById(scope.familyId());
         if (family == null) {
-            throw new BizException("家庭不存在");
+            throw new BizException(404, "家庭不存在");
         }
         family.setName(dto.getName());
         family.setDescription(dto.getDescription());

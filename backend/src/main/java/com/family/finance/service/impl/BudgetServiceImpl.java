@@ -184,7 +184,7 @@ public class BudgetServiceImpl implements BudgetService {
         }
         Category c = categoryMapper.selectById(categoryId);
         if (c == null || !c.getFamilyId().equals(scope.familyId())) {
-            throw new BizException("分类不存在");
+            throw new BizException(404, "分类不存在");
         }
         if (c.getType() != 2) {
             throw new BizException(400, "预算仅支持支出分类");
@@ -209,7 +209,7 @@ public class BudgetServiceImpl implements BudgetService {
     private Budget requireBudget(Long id) {
         Budget b = budgetMapper.selectById(id);
         if (b == null || !b.getFamilyId().equals(scope.familyId())) {
-            throw new BizException("预算不存在");
+            throw new BizException(404, "预算不存在");
         }
         return b;
     }
